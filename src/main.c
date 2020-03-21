@@ -6,10 +6,8 @@
 #include "server.h"
 #include "boardconfig.h"
 
-
 void app_main()
 {
-    //teste
     ESP_ERROR_CHECK(nvs_flash_init());
     board_init();
     http_server_init();
