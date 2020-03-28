@@ -6,7 +6,7 @@
 #include "esp_event_loop.h"
 #include "esp_log.h"
 #include "esp_wifi.h"
-#include "ledtask.h"
+#include "leds.h"
 #include "server.h"
 #include "html.h"
 
@@ -17,29 +17,32 @@
    If you'd rather not, just change the below entries to strings with
    the config you want - ie #define EXAMPLE_WIFI_SSID "mywifissid"
 */
-#define EXAMPLE_ESP_WIFI_SSID      "ALLEF_ESP32"
+#define EXAMPLE_ESP_WIFI_SSID      "BETO_CLARO"
 #define EXAMPLE_ESP_WIFI_PASS      "12345678"
-#define EXAMPLE_MAX_STA_CONN       2
 
-#define PORT 11000
+
 
 /* FreeRTOS event group to signal when we are connected & ready to make a request */
 static EventGroupHandle_t s_wifi_event_group;
 
-static const char *TAG = "wifi softAP";
+const int CONNECTED_BIT = BIT0;
+
+static const char *TAG = "esp32_test";
 
 static esp_err_t event_handler(void *ctx, system_event_t *event)
 {
     switch(event->event_id) {
-    case SYSTEM_EVENT_AP_STACONNECTED:
-        ESP_LOGI(TAG, "station:"MACSTR" join, AID=%d",
-                 MAC2STR(event->event_info.sta_connected.mac),
-                 event->event_info.sta_connected.aid);       
+    case SYSTEM_EVENT_STA_START:
+        esp_wifi_connect();
         break;
-    case SYSTEM_EVENT_AP_STADISCONNECTED:
-        ESP_LOGI(TAG, "station:"MACSTR"leave, AID=%d",
-                 MAC2STR(event->event_info.sta_disconnected.mac),
-                 event->event_info.sta_disconnected.aid);
+    case SYSTEM_EVENT_STA_GOT_IP:
+        xEventGroupSetBits(s_wifi_event_group, CONNECTED_BIT);
+        break;
+    case SYSTEM_EVENT_STA_DISCONNECTED:
+        /* This is a workaround as ESP32 WiFi libs don't currently
+           auto-reassociate. */
+        esp_wifi_connect();
+        xEventGroupClearBits(s_wifi_event_group, CONNECTED_BIT);
         break;
     default:
         break;
@@ -47,38 +50,28 @@ static esp_err_t event_handler(void *ctx, system_event_t *event)
     return ESP_OK;
 }
 
-static void wifi_init_softap()
+static void initialise_wifi(void)
 {
-    s_wifi_event_group = xEventGroupCreate();
-
     tcpip_adapter_init();
-    ESP_ERROR_CHECK(esp_event_loop_init(event_handler, NULL));
-
+    s_wifi_event_group = xEventGroupCreate();
+    ESP_ERROR_CHECK( esp_event_loop_init(event_handler, NULL) );
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-    ESP_ERROR_CHECK(esp_wifi_init(&cfg));
+    ESP_ERROR_CHECK( esp_wifi_init(&cfg) );
+    ESP_ERROR_CHECK( esp_wifi_set_storage(WIFI_STORAGE_RAM) );
     wifi_config_t wifi_config = {
-        .ap = {
+        .sta = {
             .ssid = EXAMPLE_ESP_WIFI_SSID,
-            .ssid_len = strlen(EXAMPLE_ESP_WIFI_SSID),
             .password = EXAMPLE_ESP_WIFI_PASS,
-            .max_connection = EXAMPLE_MAX_STA_CONN,
-            .authmode = WIFI_AUTH_WPA_WPA2_PSK
         },
     };
-    if (strlen(EXAMPLE_ESP_WIFI_PASS) == 0) {
-        wifi_config.ap.authmode = WIFI_AUTH_OPEN;
-    }
-
-    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
-    ESP_ERROR_CHECK(esp_wifi_set_config(ESP_IF_WIFI_AP, &wifi_config));
-    ESP_ERROR_CHECK(esp_wifi_start());
-
-    ESP_LOGI(TAG, "wifi_init_softap finished.SSID:%s password:%s",
-             EXAMPLE_ESP_WIFI_SSID, EXAMPLE_ESP_WIFI_PASS);
+    ESP_LOGI(TAG, "Setting WiFi configuration SSID %s...", wifi_config.sta.ssid);
+    ESP_ERROR_CHECK( esp_wifi_set_mode(WIFI_MODE_STA) );
+    ESP_ERROR_CHECK( esp_wifi_set_config(WIFI_IF_STA, &wifi_config) );
+    ESP_ERROR_CHECK( esp_wifi_start() );
 }
 
 /* An HTTP GET handler */
-static esp_err_t hello_get_handler(httpd_req_t *req)
+static  esp_err_t hello_get_handler(httpd_req_t *req)
 {
     char*  buf;
     size_t buf_len;
@@ -94,27 +87,27 @@ static esp_err_t hello_get_handler(httpd_req_t *req)
             /* Get value of expected key from query string */
             if (httpd_query_key_value(buf, "LED1", param, sizeof(param)) == ESP_OK) {
                 ESP_LOGI(TAG, "Found URL query parameter => LED1=%s", param);
-                change_led_state(1, param);
+                choice_led_state(1, param, 0);
             } 
             if (httpd_query_key_value(buf, "LED2", param, sizeof(param)) == ESP_OK) {
                 ESP_LOGI(TAG, "Found URL query parameter => LED2=%s", param);
-                change_led_state(2, param);
+                choice_led_state(2, param, 0);
             }
             if (httpd_query_key_value(buf, "LED3", param, sizeof(param)) == ESP_OK) {
                 ESP_LOGI(TAG, "Found URL query parameter => LED3=%s", param);
-                change_led_state(3, param);
+                choice_led_state(3, param, 0);
             }
             if (httpd_query_key_value(buf, "BLINK1", param, sizeof(param)) == ESP_OK) {
                 ESP_LOGI(TAG, "Found URL query parameter => BLINK1=%s", param);
-                blink_led(1, atoi(param));
+                choice_led_state(1, "BLINK", atoi(param));
             }
             if (httpd_query_key_value(buf, "BLINK2", param, sizeof(param)) == ESP_OK) {
                 ESP_LOGI(TAG, "Found URL query parameter => BLINK2=%s", param);
-                blink_led(2, atoi(param));
+                choice_led_state(2, "BLINK", atoi(param));
             }
             if (httpd_query_key_value(buf, "BLINK3", param, sizeof(param)) == ESP_OK) {
                 ESP_LOGI(TAG, "Found URL query parameter => BLINK3=%s", param);
-                blink_led(3, atoi(param));
+                choice_led_state(3, "BLINK", atoi(param));
             }
         }
         free(buf);
@@ -160,6 +153,6 @@ static httpd_handle_t start_webserver(void)
 
 void http_server_init()
 {
-    wifi_init_softap();
+    initialise_wifi();
     start_webserver();
 }

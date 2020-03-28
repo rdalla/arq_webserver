@@ -138,10 +138,11 @@ void blink_led(int led, int delay)
 
 void init_leds_task()
 {
-    xTaskCreate(&blink_red_task, "blink_red_task", configMINIMAL_STACK_SIZE, NULL, tskIDLE_PRIORITY + 1, NULL);
-    xTaskCreate(&blink_yellow_task, "blink_yellow_task", configMINIMAL_STACK_SIZE, NULL, tskIDLE_PRIORITY + 1, NULL);
-    xTaskCreate(&blink_green_task, "blink_green_task", configMINIMAL_STACK_SIZE, NULL, tskIDLE_PRIORITY + 1, NULL);
-    xTaskCreate(&onoff_task, "onoff_task", configMINIMAL_STACK_SIZE, NULL, tskIDLE_PRIORITY + 1, NULL);
+    //	xTaskCreate(blinkyTask1, (signed char *)"blinkyTask1", 256, NULL, 2, NULL);
+    xTaskCreate(blink_red_task, (signed char *)"blink_red_task", 256, NULL, 2, NULL);
+    xTaskCreate(blink_yellow_task,(signed char *)"blink_yellow_task", 256, NULL, 2, NULL);
+    xTaskCreate(blink_green_task, (signed char *)"blink_green_task", 256, NULL, 2, NULL);
+    xTaskCreate(onoff_task, (signed char *)"onoff_task", 256, NULL, 2, NULL);
 
 
     led_red.state = OFF;
